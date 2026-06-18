@@ -149,6 +149,25 @@ When designing complex repeatable subforms (e.g. Test Cases, Items, Partners) co
    - Do NOT embed inline `<script>` tags inside PHP template files.
    - Register the javascript asset in `/media/com_component/js/frontend.js` under the `joomla.asset.json` manifest with a `defer: true` attribute. Load it standardly using Joomla's Web Asset Manager in the template head: `$wa->useScript('com_component.frontend')`.
 
+### 3.2 Template Web Assets (WAM) Configuration & Standards
+
+For template-specific assets (CSS, JS) in Joomla 4/5/6, always register them declaratively via a `joomla.asset.json` file in the template's root directory:
+
+1. **Definition Registry File**:
+   - Create/modify `/templates/<template_name>/joomla.asset.json`.
+   - Ensure the JSON `name` property matches the template's folder name.
+   - Use the `"template."` prefix for all asset names (e.g. `"template.print-helper"`, `"template.custom"`).
+
+2. **Asset Directory Resolution**:
+   - The files referenced in the `joomla.asset.json` URI properties must be stored in the common media folder under `/media/templates/site/<template_name>/`.
+   - Script (`"type": "script"`) files go in `/media/templates/site/<template_name>/js/`.
+   - Style (`"type": "style"`) files go in `/media/templates/site/<template_name>/css/`.
+
+3. **PHP Loading in Views / Overrides**:
+   - Always retrieve the Web Asset Manager from the active document:
+     `$wa = $this->document->getWebAssetManager();`
+   - Use the asset prefix: `$wa->useScript('template.print-helper');` or `$wa->useStyle('template.print');`. This decouples layouts and views from hardcoded URLs and component-bound assets.
+
 ---
 
 ## 5. Fetching Articles in Template Overrides
@@ -187,6 +206,75 @@ $articles = $articlesModel->getItems();
 ### 5.3 Available Article Properties
 
 The model returns full article objects with: `id`, `title`, `alias`, `introtext`, `fulltext`, `catid`, `images`, `urls`, `publish_up`, `language`, `state`, etc.
+
+---
+
+## 6. Joomla Security Hardening & Vulnerability Mitigation
+
+Recent exploits in widely used extensions require strict defensive layers. Below are the key security alerts for June 2026 and standard hardening practices.
+
+### 6.1 Vulnerability Alerts (June 2026)
+
+1. **JCE (Joomla Content Editor) RCE (CVE-2026-48907 - CVSS 10.0)**:
+   - **Vulnerability**: Unauthenticated Remote Code Execution allowing attackers to inject arbitrary editor profiles, enabling upload and execution of malicious PHP scripts (web shells).
+   - **Mitigation**: Update immediately to **JCE 2.9.99.6** (or newer). Inspect server access logs for requests targeting `index.php?option=com_jce&task=profiles.import`. Review editor profiles and active accounts for unauthorized changes.
+2. **SP Page Builder Critical RCE**:
+   - **Vulnerability**: Unauthenticated file upload zero-day via the `asset.uploadCustomIcon` task, allowing execution of PHP scripts and creation of rogue "Super Administrator" accounts.
+   - **Mitigation**: Update immediately to **SP Page Builder 6.6.2** (or newer). Audit Joomla users for unexpected Super User profiles (often using mock domains like `@secure.local`).
+
+### 6.2 Server Hardening (`.htaccess` Best Practices)
+
+Applying security directives in `.htaccess` mitigates exploit attempts even if an extension is unpatched:
+
+1. **Block Direct PHP Execution in Sensitive Paths (Crucial against Web Shells)**:
+   Prevent execution of uploaded PHP scripts in the images, media, and templates directories:
+   ```apache
+   # Block PHP execution in upload folders
+   <DirectoryMatch "^.*/(images|media|tmp|cache)/.*$">
+       <FilesMatch "\.(php|php[3-8]|phtml)$">
+           Order Deny,Allow
+           Deny from all
+       </FilesMatch>
+   </DirectoryMatch>
+   ```
+   *Note: If using Nginx, convert this to equivalent `location` block rules blocking execution in these paths.*
+
+2. **Disable Directory Browsing**:
+   ```apache
+   Options -Indexes
+   ```
+
+3. **Protect configuration.php and XML files**:
+   Prevent direct browser access to critical config files and manifest XMLs:
+   ```apache
+   <FilesMatch "(configuration\.php|joomla\.xml|web\.config|\.ini|\.env)$">
+       Order Deny,Allow
+       Deny from all
+   </FilesMatch>
+   ```
+
+4. **Force HTTPS and Secure Headers**:
+   ```apache
+   <IfModule mod_headers.c>
+       Header always set X-Content-Type-Options "nosniff"
+       Header always set X-Frame-Options "SAMEORIGIN"
+       Header always set Referrer-Policy "strict-origin-when-cross-origin"
+   </IfModule>
+   ```
+
+### 6.3 Security References & Vulnerability Databases
+
+Use the following official links to monitor security alerts, verify vulnerable extensions, and report CVEs:
+
+1. **Joomla Security Centre (Core Vulnerability & CVE Alerts)**:
+   - [Joomla Security Centre](https://developer.joomla.org/security-centre.html) — Official portal listing security patches, severity, and CVE identifiers for Joomla Core.
+2. **Joomla Vulnerable Extensions List (VEL)**:
+   - [Joomla VEL Portal](https://vel.joomla.org/) — Database containing live and resolved vulnerabilities for third-party Joomla modules, plugins, and components.
+3. **Joomla CVE Details Database**:
+   - [CVE Details - Joomla](https://www.cvedetails.com/vulnerability-list/vendor_id-3496/Joomla.html) — Comprehensive vulnerability list showing historical and active CVE records, CVSS scores, and exploit vectors for Joomla.
+4. **Joomla Issue Trackers (Bug Reports & Unresolved Issues)**:
+   - [Joomla! Issue Tracker](https://issues.joomla.org/) — Official community tracker for active bugs, patches under test, and discussions.
+   - [Joomla! CMS GitHub Issues](https://github.com/joomla/joomla-cms/issues) — Direct repository issues page to check for ongoing bug reports, security reports (non-embargoed), and CMS features development.
 
 ---
 
